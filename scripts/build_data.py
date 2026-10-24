@@ -32,3 +32,8 @@ out = dict(sectors=names, firms=sorted(firms.values(), key=lambda f: (f['b'], f[
 json.dump(out, open(os.path.join(ROOT, 'web', 'data', 'firms.json'), 'w', encoding='utf-8'),
           ensure_ascii=False, separators=(',', ':'))
 print('firma', len(firms), 'sektorlu', sum(1 for f in firms.values() if f['s']), 'sektor adi', len(names))
+
+# gerçek konumlar ve hat renkleri (koordinatlar varsa; yoksa önce scripts/fetch_coords.py)
+if os.path.exists(os.path.join(VERI, 'koordinatlar.json')):
+    import fit_coords
+    fit_coords.main()

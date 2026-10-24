@@ -21,35 +21,84 @@ export async function loadData(json) {
   return DB;
 }
 
-// Her kat/blok için slotlara numara ver, firmaları numarasına en yakın slota yerleştir
+// Firmaları dükkân yuvalarına yerleştir.
+// Konumu bilinen firma (p: perpa.com.tr haritasından, scripts/fit_coords.py) kendine en yakın boş
+// yuvaya oturur; konumsuz firmalar ve kaydı olmayan dükkânlar numarası komşulardan tahmin edilerek doldurulur.
+const ZONE_OF = { K: 'KIRMIZI', S: 'SARI', M: 'MAVI', Y: 'YESIL' };
+const d2 = (a, x, z) => (a.x - x) ** 2 + (a.z - z) ** 2;
+
 function assignFirms() {
+  // kat/blok numara aralıkları (kaydı hiç olmayan katlarda numara uydurmak için)
   const ranges = {};
   for (const f of DB.firms) {
-    const key = f.b + f.ef; const r = ranges[key] || (ranges[key] = { lo: Infinity, hi: -Infinity, list: [] });
-    r.lo = Math.min(r.lo, f.no); r.hi = Math.max(r.hi, f.no); r.list.push(f);
+    const r = ranges[f.b + f.ef] || (ranges[f.b + f.ef] = { lo: Infinity, hi: -Infinity });
+    r.lo = Math.min(r.lo, f.no); r.hi = Math.max(r.hi, f.no);
   }
+  const zoneVotes = new Map(); // yuva -> {renk: oy} (aynı varyanttaki tüm katlardan)
   for (let fl = 1; fl <= FLOORS; fl++) {
     const lay = getLayout(variantOf(fl));
-    const shops = lay.slots.map((slot, si) => ({ floor: fl, si, slot, block: slot.block, no: 0, firm: null }));
+    const shops = lay.slots.map((slot, si) => ({ floor: fl, si, slot, block: slot.block, no: 0, firm: null, est: false }));
     for (const b of ['A', 'B']) {
       const mine = shops.filter(s => s.block === b);
-      let r = ranges[b + fl];
-      if (!r) { // veri yoksa komşu katlardan aralık uydur
-        const prev = ranges[b + (fl - 1)], next = ranges[b + (fl + 1)];
-        const lo = prev ? prev.hi + 3 : (next ? Math.max(1, next.lo - mine.length * 2) : fl * 150);
-        r = { lo, hi: next ? next.lo - 3 : lo + mine.length * 2, list: [] };
+      const firms = DB.firms.filter(f => f.b === b && f.ef === fl);
+      // 1) konumlu firmalar: en yakın çiftten başlayarak açgözlü eşleme
+      const pairs = [];
+      for (const f of firms) if (f.p) {
+        const [x, z] = f.p;
+        for (let j = 0; j < mine.length; j++) { const d = d2(mine[j].slot, x, z); if (d < 1600) pairs.push([d, f, j]); }
       }
-      const N = mine.length;
-      mine.forEach((s, j) => { s.no = Math.round(r.lo + (r.hi - r.lo) * (N > 1 ? j / (N - 1) : 0)); });
-      for (let j = 1; j < N; j++) if (mine[j].no <= mine[j - 1].no) mine[j].no = mine[j - 1].no + 1;
-      for (const f of r.list.sort((a, c) => a.no - c.no)) {
+      pairs.sort((p, q) => p[0] - q[0]);
+      for (const [, f, j] of pairs) {
+        if (f.shop || mine[j].firm) continue;
+        mine[j].firm = f; mine[j].no = f.no; f.shop = mine[j];
+        if (f.c) {
+          const v = zoneVotes.get(mine[j].slot) || {}; v[ZONE_OF[f.c]] = (v[ZONE_OF[f.c]] || 0) + 1; zoneVotes.set(mine[j].slot, v);
+        }
+      }
+      // 2) boş yuvaların numarası: en yakın iki konumlu dükkândan
+      const known = mine.filter(s => s.firm);
+      const used = new Set(known.map(s => s.no));
+      for (const s of mine) {
+        if (s.firm) continue;
+        s.est = true;
+        if (!known.length) { // bu katta hiç kayıt yok: komşu katların aralığından sırayla
+          const prev = ranges[b + (fl - 1)], next = ranges[b + (fl + 1)], N = mine.length, j = mine.indexOf(s);
+          const lo = prev ? prev.hi + 3 : (next ? Math.max(1, next.lo - N * 2) : fl * 150);
+          const hi = next ? next.lo - 3 : lo + N * 2;
+          s.no = Math.round(lo + j * Math.max(1, (hi - lo) / Math.max(1, N - 1)));
+          continue;
+        }
+        const near = known.map(k => [d2(k.slot, s.slot.x, s.slot.z), k]).sort((p, q) => p[0] - q[0]).slice(0, 2);
+        const w = near.map(([d]) => 1 / (Math.sqrt(d) + 0.5));
+        let no = Math.round(near.reduce((a, [, k], i) => a + k.no * w[i], 0) / w.reduce((a, c) => a + c, 0));
+        for (let k = 0; used.has(no) && k < 40; k++) no += (k % 2 ? -k : k);
+        s.no = no; used.add(no);
+      }
+      // 3) konumsuz firmalar: numarası en yakın boş yuvaya
+      for (const f of firms) {
+        if (f.shop) continue;
         let best = -1, bd = Infinity;
-        for (let j = 0; j < N; j++) if (!mine[j].firm) { const d = Math.abs(mine[j].no - f.no); if (d < bd) { bd = d; best = j; } }
+        for (let j = 0; j < mine.length; j++) if (!mine[j].firm) { const d = Math.abs(mine[j].no - f.no); if (d < bd) { bd = d; best = j; } }
         if (best < 0) continue;
-        mine[best].firm = f; mine[best].no = f.no; f.shop = mine[best];
+        mine[best].firm = f; mine[best].no = f.no; mine[best].est = false; f.shop = mine[best];
       }
     }
     DB.floors[fl] = shops;
+  }
+  // yuva renkleri: gerçek plandaki renklerin çoğunluğu; oyu olmayan yuva en yakın oylu yuvadan alır
+  for (const v of ['G', 'E', 'N']) {
+    const slots = getLayout(v).slots;
+    const voted = slots.filter(s => zoneVotes.has(s));
+    if (!voted.length) continue;
+    const pick = s => { const o = zoneVotes.get(s); return Object.keys(o).reduce((a, c) => (o[c] > o[a] ? c : a)); };
+    const zone = new Map(voted.map(s => [s, pick(s)]));
+    for (const s of slots) {
+      if (zone.has(s)) continue;
+      let best = null, bd = Infinity;
+      for (const o of voted) if (o.block === s.block) { const d = d2(o, s.x, s.z); if (d < bd) { bd = d; best = o; } }
+      if (best && bd < 15 * 15) zone.set(s, zone.get(best));
+    }
+    for (const [s, z] of zone) s.zone = z;
   }
 }
 

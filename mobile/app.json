@@ -2,7 +2,7 @@
   "expo": {
     "name": "PerpAI",
     "slug": "perpai",
-    "version": "1.0.0",
+    "version": "0.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "perpai",
@@ -22,7 +22,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.wpuresearch.perpai"
+      "package": "com.wpuresearch.perpai",
+      "versionCode": 2
     },
     "web": {
       "output": "single",

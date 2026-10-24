@@ -53,17 +53,20 @@ export const variantOf = f => (f <= 3 ? 'G' : f === 8 ? 'E' : 'N');
 // Avlular (hücreler)
 export const CELLS = [];
 {
-  const colorsB = ['MAVI', 'YESIL', 'SARI', 'MAVI'];
-  const colorsA = ['SARI', 'YESIL', 'MAVI', 'SARI'];
-  let elev = 13;
+  // gerçek kat planlarından: sıra arka-sol, arka-sağ, ön-sol, ön-sağ (blok ortasındaki yeşil
+  // bölge avluya ait değil, dükkân renkleri firmalar.json'daki gerçek renkten gelir)
+  const real = {
+    B: { colors: ['MAVI', 'SARI', 'MAVI', 'SARI'], elev: [20, 19, 13, 14] },
+    A: { colors: ['SARI', 'MAVI', 'SARI', 'MAVI'], elev: [18, 17, 15, 16] },
+  };
   for (const blk of BLOCKS) {
-    const cols = blk.id === 'B' ? colorsB : colorsA;
+    const R = real[blk.id];
     let k = 0;
     for (const sv of [-1, 1]) for (const su of [-1, 1]) {
       const cu = su * (CROSS + CELL_HU), cv = sv * (CROSS + CELL_HV);
       CELLS.push({
-        block: blk.id, cx: blk.cx + cu, cz: cv, color: cols[k], front: sv > 0,
-        elevator: elev++, idx: CELLS.length,
+        block: blk.id, cx: blk.cx + cu, cz: cv, color: R.colors[k], front: sv > 0,
+        elevator: R.elev[k], idx: CELLS.length,
       });
       k++;
     }
@@ -73,16 +76,15 @@ export const CELLS = [];
 // Kapılar / merdiven çekirdekleri (1-12)
 export const GATES = [];
 {
-  let n = 1;
+  // yerler gerçek kat planından (scripts/fit_coords.py, kapı ikonları); u blok merkezine göre
+  const REAL = {
+    B: [{ n: 1, u: 37.5, v: HV, side: 'front' }, { n: 2, u: -34, v: HV, side: 'front' }, { n: 3, u: -HU, v: 36, side: 'end' },
+      { n: 4, u: -63, v: -HV, side: 'back' }, { n: 5, u: -38, v: -HV, side: 'back' }, { n: 6, u: 30, v: -HV, side: 'back' }],
+    A: [{ n: 7, u: -41.5, v: -HV, side: 'back' }, { n: 8, u: 28.5, v: -HV, side: 'back' }, { n: 9, u: 56, v: -HV, side: 'back' },
+      { n: 10, u: 62, v: HV, side: 'front' }, { n: 11, u: 33, v: HV, side: 'front' }, { n: 12, u: -30.5, v: HV, side: 'front' }],
+  };
   for (const blk of BLOCKS) {
-    const outer = -blk.inner;
-    const spots = [
-      { u: -45, v: HV, side: 'front' }, { u: 45, v: HV, side: 'front' },
-      { u: outer * HU, v: 20, side: 'end' }, { u: outer * HU, v: -20, side: 'end' },
-      { u: 45, v: -HV, side: 'back' }, { u: -45, v: -HV, side: 'back' },
-    ];
-    if (blk.id === 'A') spots.reverse();
-    for (const s of spots) {
+    for (const s of REAL[blk.id]) {
       let core, door, face;
       if (s.side === 'front' || s.side === 'back') {
         const sg = Math.sign(s.v);
@@ -95,7 +97,7 @@ export const GATES = [];
         door = { x: blk.cx + sg * (HU - STRIP - 2), z: s.v };
         face = [-sg, 0];
       }
-      GATES.push({ n: n++, block: blk.id, core, door, face });
+      GATES.push({ n: s.n, block: blk.id, core, door, face });
     }
   }
 }
@@ -148,7 +150,8 @@ function blockSlots(blk, variant) {
     const [cx, cz] = coreHalf(g.core);
     return Math.abs(g.core.x - x) < cx + hx - 0.05 && Math.abs(g.core.z - z) < cz + hz - 0.05;
   });
-  const SW = 5;
+  // gerçek dükkân cephesi ~3,5 m; B Blok gerçekte A'dan ~%14 uzun, aynı çevreye daha çok dükkân sığıyor
+  const SW = blk.id === 'B' ? 3.1 : 3.6;
   // dış şerit: ön ve arka yüz
   for (const sv of [1, -1]) {
     if (garage && sv > 0) continue;
@@ -170,6 +173,13 @@ function blockSlots(blk, variant) {
       push(u, v, SW, STRIP, -su, 0, 'KIRMIZI');
     }
   }
+  // garaj katları: garaja bakan sırt sırta dükkân sırası (gerçek planda 1–3. katların ortasında)
+  if (garage) {
+    for (let u = -HU + STRIP + SW / 2; u <= HU - STRIP - SW / 2 + 0.01; u += SW) {
+      push(u, GARAGE_ROW - 3, SW, 6, 0, -1, 'KIRMIZI');
+      push(u, GARAGE_ROW + 3, SW, 6, 0, 1, 'KIRMIZI');
+    }
+  }
   // avlular
   for (const c of CELLS.filter(c => c.block === blk.id)) {
     if (garage && c.front) continue;
@@ -185,16 +195,17 @@ function blockSlots(blk, variant) {
     }
     // yan bölgeler: radyal koridora ve hücre kenarına bakan sıralar
     for (const su of [-1, 1]) for (const sv of [-1, 1]) {
-      for (let i = 0; i < 3; i++) {
-        const u = cu + su * (OCT_SHOP + 0.2 + 4.85 * i + 2.425);
-        push(u, cv + sv * (2 + 3), 4.85, 6, 0, -sv, c.color, c.idx);           // radyal koridora bakan
-        push(u, cv + sv * (CELL_HV - 3), 4.85, 6, 0, sv, c.color, c.idx);       // dış koridora bakan
+      for (let i = 0; i < 4; i++) {
+        const u = cu + su * (OCT_SHOP + 0.2 + 3.6 * i + 1.8);
+        push(u, cv + sv * (2 + 3), 3.6, 6, 0, -sv, c.color, c.idx);            // radyal koridora bakan
+        push(u, cv + sv * (CELL_HV - 3), 3.6, 6, 0, sv, c.color, c.idx);        // dış koridora bakan
       }
     }
   }
   return out;
 }
-export const PASSAGES = [-25, 0, 25]; // orta salon -> blok geçişleri (v)
+export const PASSAGES = [-25, 0, 25];
+const GARAGE_ROW = 20.5; // garaj katlarındaki dükkân sırasının ortası (v) // orta salon -> blok geçişleri (v)
 
 // --- Yürünebilir ızgara -----------------------------------------------------
 export function buildGrid(variant) {
@@ -224,6 +235,7 @@ export function buildGrid(variant) {
     if (variant === 'G') { // garaj: ön yarı açık alan
       set(X(-HU + STRIP), X(HU - STRIP), 0, HV - STRIP, Z.GARAGE);
       set(X(-HU + 1), X(HU - 1), 2, HV - 1, Z.GARAGE);
+      set(X(-HU + STRIP), X(HU - STRIP), GARAGE_ROW - 6, GARAGE_ROW + 6, Z.NONE);
     }
   }
   for (const c of CELLS) {

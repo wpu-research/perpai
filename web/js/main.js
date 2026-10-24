@@ -729,7 +729,7 @@ function describeAction(a) {
     if (s.kind === 'ghost') return `👻 ${s.ghost.name.split(' (')[0]} ileride!`;
     const p = avatar.obj.position, h = avatar.heading, sl = s.shop.slot;
     const cross = Math.sin(h) * (sl.z - p.z) - Math.cos(h) * (sl.x - p.x);
-    return `🏁 No ${s.shop.no} ${cross > 0 ? 'solunuzda' : 'sağınızda'} — ${s.firm}`;
+    return `🏁 No ${s.shop.no} ${cross < 0 ? 'solunuzda' : 'sağınızda'} — ${s.firm}`;
   }
   if (a.type === 'finish') return '🚪 Çıkış: ana giriş';
   return '';

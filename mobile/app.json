@@ -2,7 +2,7 @@
   "expo": {
     "name": "PerpAI",
     "slug": "perpai",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "perpai",
@@ -23,7 +23,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.wpuresearch.perpai",
-      "versionCode": 3
+      "versionCode": 4
     },
     "web": {
       "output": "single",

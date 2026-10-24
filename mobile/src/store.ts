@@ -34,6 +34,7 @@ type State = {
   lists: ShopList[];
   hints: Record<string, Hint>; // satır -> yapay zekâ ipucu (önbellek)
   location: (Place & { at: number }) | null;   // son QR konumu
+  calib: number | null;                        // kamera yönü: pusula -> model açısı farkı (guide.ts)
   createList: (text: string, title: string, pick: 'uzman' | 'yakin') => string;
   rematch: (id: string, pick: 'uzman' | 'yakin') => void;
   nextAlternative: (listId: string, itemId: string) => void;
@@ -41,6 +42,7 @@ type State = {
   setList: (listId: string, patch: Partial<ShopList>) => void;
   deleteList: (listId: string) => void;
   setLocation: (p: Place | null) => void;
+  setCalib: (c: number | null) => void;
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -64,6 +66,7 @@ export const useStore = create<State>()(persist((set, get) => ({
   lists: [],
   hints: {},
   location: null,
+  calib: null,
   createList: (text, title, pick) => {
     const id = uid();
     const list: ShopList = { id, title: title.trim() || 'Alışveriş listesi', createdAt: Date.now(), status: 'planned', pick, items: match(text, pick, get().hints), here: null };
@@ -105,6 +108,7 @@ export const useStore = create<State>()(persist((set, get) => ({
   setList: (listId, patch) => set({ lists: get().lists.map(l => l.id === listId ? { ...l, ...patch } : l) }),
   deleteList: listId => set({ lists: get().lists.filter(l => l.id !== listId) }),
   setLocation: p => set({ location: p ? { ...p, at: Date.now() } : null }),
+  setCalib: c => set({ calib: c }),
 }), { name: 'perpai-v1', storage: createJSONStorage(() => AsyncStorage) }));
 
 export const useList = (id?: string) => useStore(s => s.lists.find(l => l.id === id));

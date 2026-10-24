@@ -12,11 +12,14 @@ import { Button, Card, Icon, ZoneChip, type IconName } from '@/ui';
 type Walk = Extract<Segment, { type: 'walk' }>;
 
 export default function Navigate() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, arrived } = useLocalSearchParams<{ id: string; arrived?: string }>();
   const list = useList(id);
   const location = useStore(s => s.location);
   const { setItem, setList } = useStore();
-  const [shopping, setShopping] = useState(false);
+  const [shopping, setShopping] = useState(arrived === '1');
+  // kamerayla yürüyüşten "vardım" ile dönüldüyse alışveriş satırlarını aç
+  const [prevArrived, setPrevArrived] = useState(arrived);
+  if (arrived !== prevArrived) { setPrevArrived(arrived); if (arrived === '1') setShopping(true); }
 
   const here: Place | null = list ? startOf(list, location) : null;
   const plan = useMemo(() => (list && here ? planFor(list, here) : null), [list, here]);
@@ -64,6 +67,8 @@ export default function Navigate() {
             {steps[1] ? <Text style={{ color: '#C9D3E0', fontSize: 12.5 }} numberOfLines={2}>Sonra: {steps[1].text}</Text> : null}
           </View>
         </Card>
+
+        <Button title="Kamerayla yürü · sesli yönlendirme" icon="camera-outline" kind="dark" onPress={() => router.push({ pathname: '/ar/[id]', params: { id: list.id } })} />
 
         <View style={st.where}>
           <Icon name="crosshairs-gps" size={16} color={C.route} />

@@ -1,6 +1,6 @@
 // Çekirdek modüllere (src/core, web/js'den kopya) tipli giriş noktası
 import firmsJson from './core/firms.json';
-import { loadData, DB as RawDB, parseList, candidatesFor, chooseShops, shopTitle, PRESETS } from './core/data.js';
+import { loadData, DB as RawDB, parseList, candidatesFor, chooseShops, shopTitle, PRESETS, aiHints as rawAiHints } from './core/data.js';
 import { planRoute, legInstructions } from './core/nav.js';
 import { ENTRY, FLOORS, getLayout, variantOf, zoneAt, CELLS, GATES, WELLS, HALL, DIM, GX0, GZ0, GW, GH, floorY } from './core/layout.js';
 import { qrList, resolveQR, parseScanned, KIND_LABEL } from './core/qr.js';
@@ -12,6 +12,10 @@ export type Shop = { floor: number; si: number; slot: Slot; block: 'A' | 'B'; no
 export type Point = { x: number; z: number; floor: number };
 export type Place = Point & { heading: number; label: string; sub?: string; code?: string; source: 'giris' | 'qr' | 'durak' };
 export type QRPlace = { code: string; kind: string; floor: number; x: number; z: number; heading: number; label: string; sub: string; zone: ZoneKey | null; block?: 'A' | 'B'; no?: number };
+
+// sunucudaki yapay zekâ ipucu (server/index.js)
+export type Hint = { i: number; label: string; cat: string; sectors: number[]; terms: string[] };
+export const aiHints = rawAiHints as (lines: string[], ms?: number) => Promise<(Hint | null)[]>;
 
 export const DB = RawDB as unknown as { sectors: Record<number, string>; firms: Firm[]; floors: Record<number, Shop[]> };
 

@@ -1,10 +1,10 @@
 // Uygulama durumu: alışveriş listeleri, harcamalar, QR konumu. Cihazda kalıcı (AsyncStorage);
-// sunucu eşitlemesi sonraki adım.
+// liste satırları eşleştirme ipucu için sunucuya gider (yapay zekâ), listelerin eşitlemesi sonraki adım.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { candidatesFor, chooseShops, parseList, shopKey, type Place, type Shop } from './perpa';
+import { aiHints, candidatesFor, chooseShops, parseList, shopKey, type Hint, type Place, type Shop } from './perpa';
 
 export type ItemStatus = 'todo' | 'bought' | 'skipped';
 export type ListItem = {
@@ -32,6 +32,7 @@ export type ShopList = {
 
 type State = {
   lists: ShopList[];
+  hints: Record<string, Hint>; // satır -> yapay zekâ ipucu (önbellek)
   location: (Place & { at: number }) | null;   // son QR konumu
   createList: (text: string, title: string, pick: 'uzman' | 'yakin') => string;
   rematch: (id: string, pick: 'uzman' | 'yakin') => void;
@@ -45,11 +46,11 @@ type State = {
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 type Choice = { shop: Shop; score: number };
-type Matched = { label: string; raw: string; qty: string | null; cands?: { cat: string | null; list: Choice[] }; pool?: Choice[]; choice?: Choice };
+type Matched = { label: string; raw: string; qty: string | null; ai?: Hint | null; cands?: { cat: string | null; list: Choice[] }; pool?: Choice[]; choice?: Choice };
 
-function match(text: string, pick: 'uzman' | 'yakin'): ListItem[] {
+function match(text: string, pick: 'uzman' | 'yakin', hints: Record<string, Hint> = {}): ListItem[] {
   const items = (parseList(text) as Matched[]).slice(0, 15);
-  for (const it of items) it.cands = candidatesFor(it);
+  for (const it of items) { it.ai = hints[it.raw] ?? null; it.cands = candidatesFor(it); }
   chooseShops(items, pick);
   return items.map(it => ({
     id: uid(), raw: it.raw, label: it.label, qty: it.qty, cat: it.cands?.cat ?? null,
@@ -61,17 +62,29 @@ function match(text: string, pick: 'uzman' | 'yakin'): ListItem[] {
 
 export const useStore = create<State>()(persist((set, get) => ({
   lists: [],
+  hints: {},
   location: null,
   createList: (text, title, pick) => {
     const id = uid();
-    const list: ShopList = { id, title: title.trim() || 'Alışveriş listesi', createdAt: Date.now(), status: 'planned', pick, items: match(text, pick), here: null };
+    const list: ShopList = { id, title: title.trim() || 'Alışveriş listesi', createdAt: Date.now(), status: 'planned', pick, items: match(text, pick, get().hints), here: null };
     set({ lists: [list, ...get().lists] });
+    // önce kurallarla hemen eşleştir; yapay zekâ ipuçları gelince yeniden eşleştir
+    const missing = list.items.map(i => i.raw).filter(r => !get().hints[r]);
+    if (missing.length) {
+      aiHints(missing).then(hs => {
+        const got = Object.fromEntries(hs.flatMap((h, k) => (h ? [[missing[k], h]] : [])));
+        if (!Object.keys(got).length) return;
+        set({ hints: { ...get().hints, ...got } });
+        const l = get().lists.find(x => x.id === id);
+        if (l) get().rematch(id, l.pick);
+      });
+    }
     return id;
   },
   rematch: (id, pick) => set({
     lists: get().lists.map(l => {
       if (l.id !== id) return l;
-      const fresh = match(l.items.map(i => i.raw).join('\n'), pick);
+      const fresh = match(l.items.map(i => i.raw).join('\n'), pick, get().hints);
       // alınmış kalemlerin durumunu koru
       const items = fresh.map((f, k) => (l.items[k] && l.items[k].status !== 'todo' ? { ...l.items[k] } : f));
       return { ...l, pick, items };

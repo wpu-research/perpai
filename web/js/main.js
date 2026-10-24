@@ -6,7 +6,7 @@ import {
   getLayout, variantOf, zoneAt, nearestWalkable, coreHalf, HALL, cellIdx,
 } from './layout.js';
 import { planRoute } from './nav.js';
-import { loadData, DB, parseList, candidatesFor, chooseShops, PRESETS, shopTitle } from './data.js';
+import { loadData, DB, parseList, candidatesFor, chooseShops, PRESETS, shopTitle, aiHints } from './data.js';
 import { World, PLAZA_Y } from './world.js';
 import { Avatar, Crowd, RouteViz, animatePerson, makePerson, bubble } from './actors.js';
 import { resolveQR, parseScanned } from './qr.js';
@@ -205,7 +205,8 @@ async function scanList() {
   if (S.story) items = storyItems();
   else {
     items = parseList($('#listText').value).slice(0, 10);
-    for (const it of items) it.cands = candidatesFor(it);
+    const hints = await aiHints(items.map(it => it.raw));
+    items.forEach((it, k) => { it.ai = hints[k]; it.cands = candidatesFor(it); });
     chooseShops(items, S.pick);
   }
   S.items = items;

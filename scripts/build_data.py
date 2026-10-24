@@ -37,3 +37,7 @@ print('firma', len(firms), 'sektorlu', sum(1 for f in firms.values() if f['s']),
 if os.path.exists(os.path.join(VERI, 'koordinatlar.json')):
     import fit_coords
     fit_coords.main()
+
+# sunucunun yapay zekâ istemi için sektör listesi
+json.dump({int(k): v for k, v in names.items()}, open(os.path.join(ROOT, 'server', 'sectors.json'), 'w', encoding='utf-8'),
+          ensure_ascii=False, indent=0)

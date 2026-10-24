@@ -130,7 +130,7 @@ const RULES = [
   { re: /gözlük|saat/, s: [73], n: /GÖZLÜK|OPTİK|SAAT/, cat: 'Gözlük / saat' },
   { re: /oyuncak|hediye|bijuteri|hediyelik/, s: [3], n: /OYUNCAK|HEDİYE/, cat: 'Hediyelik' },
   { re: /bardak|tabak|mutfak|tencere|termos/, s: [80, 58], n: /ZÜCCACİYE|MUTFAK/, cat: 'Züccaciye' },
-  { re: /\bcam\b|ayna/, s: [10], n: /CAM|AYNA/, cat: 'Cam' },
+  { re: /\bcam\b|\bayna/, s: [10], n: /CAM|AYNA/, cat: 'Cam' },
   { re: /çay|kahve|yemek|döner|tost|börek|simit|lokanta/, s: [17, 12], n: /CAFE|KAFE|RESTORAN|LOKANTA|BÜFE|DÖNER|PİDE|KEBAP/, cat: 'Yeme-içme' },
   { re: /kargo|gönderi|paket gönder/, s: [75], n: /KARGO|EXPRESS|LOJİSTİK/, cat: 'Kargo' },
   { re: /banka|atm|para çek/, s: [18], n: /BANK|KATILIM/, cat: 'Banka' },
@@ -148,6 +148,35 @@ export function parseList(text) {
   });
 }
 
+// --- Yapay zekâ ipuçları (server/: Claude, satır -> sektörler + firma adı kelimeleri) ----------
+export const API_BASE = 'https://perpai-api-production.up.railway.app';
+
+// Satır başına ipucu dizisi döner (eşleşmeyen satır null); sunucuya ulaşılamazsa hepsi null.
+export async function aiHints(lines, ms = 8000) {
+  const empty = lines.map(() => null);
+  if (!lines.length) return empty;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(API_BASE + '/api/hints', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ lines: lines.slice(0, 30) }), signal: ctl.signal,
+    });
+    if (!r.ok) return empty;
+    const { hints } = await r.json();
+    for (const h of hints || []) if (h.i >= 0 && h.i < lines.length) empty[h.i] = h;
+    return empty;
+  } catch { return empty; } finally { clearTimeout(timer); }
+}
+
+const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// elle yazılmış kural öncelikli (ölçümde daha isabetli); kuralın tanımadığı üründe yapay zekâ ipucu (item.ai)
+function ruleFor(item, low) {
+  const r = RULES.find(x => x.re.test(low));
+  const ai = item.ai;
+  if (r || !ai || (!ai.sectors.length && !ai.terms.length)) return r;
+  return { s: ai.sectors, n: ai.terms.length ? new RegExp(ai.terms.map(escRe).join('|')) : /(?!)/, cat: ai.cat, ai: true };
+}
+
 function hash(n) { n = ((n >>> 16) ^ n) * 0x45d9f3b; n = ((n >>> 16) ^ n) * 0x45d9f3b; return ((n >>> 16) ^ n) >>> 0; }
 
 export function candidatesFor(item) {
@@ -160,7 +189,7 @@ export function candidatesFor(item) {
     all.sort((x, y) => Math.abs(x.no - no) - Math.abs(y.no - no));
     return { cat: 'Dükkan numarası', list: all.slice(0, 1).map(s => ({ shop: s, score: 9 })) };
   }
-  const rule = RULES.find(r => r.re.test(low));
+  const rule = ruleFor(item, low);
   const tokens = up.split(/[^A-ZÇĞİÖŞÜ0-9]+/).filter(t => t.length >= 4);
   const out = [];
   for (const f of DB.firms) {
@@ -169,6 +198,8 @@ export function candidatesFor(item) {
     if (rule) {
       const sec = f.s.some(x => rule.s.includes(x)), nm = rule.n.test(f.N);
       sc = (nm ? 3 : 0) + (sec ? 2 : 0) + (nm && sec ? 1 : 0);
+      // yapay zekâ tahmini: ad+sektör birlikte tutarsa tek kelimelik ad eşleşmesini (4) geçer, tek başına geçmez
+      if (rule.ai) sc = nm && sec ? 5 : nm ? 3 : sec ? 2 : 0;
     }
     if (tokens.length) { const hits = tokens.filter(t => f.N.includes(t)).length; if (hits) sc = Math.max(sc, 2 + hits * 2); }
     if (sc >= 2) out.push({ shop: f.shop, score: sc, h: hash(f.i) });

@@ -1,0 +1,28 @@
+# web/ değişince web demosunu Railway'e (perpai-web) gönderir.
+# Gerekli secret: RAILWAY_TOKEN (Railway → perpai projesi → Settings → Tokens, production ortamı)
+name: Web demosunu deploy et
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/deploy-web.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-web
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    container: ghcr.io/railwayapp/cli:latest
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Token kontrolü
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then echo "::error::RAILWAY_TOKEN secret'ı tanımlı değil"; exit 1; fi
+      # servisin kök dizini "web": yükleme repo kökünden yapılır
+      - name: Railway'e yükle
+        run: railway up --service perpai-web --ci

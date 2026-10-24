@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PerpAI — Perpa'da Yol Bulma</title>
+<meta name="description" content="Perpa Ticaret Merkezi'nde alışveriş listesini okut, rotayı çizsin, 3D olarak yürü.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Caveat:wght@500;700&family=Cinzel:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="fade"></div>
+
+<!-- 1. Giriş: gerçek fotoğraf -->
+<section id="intro" class="screen show">
+  <div class="photo"></div>
+  <div class="intro-inner">
+    <div class="brand"><span class="logo">Perp<b>AI</b></span><span class="tag">beta</span></div>
+    <h1>Perpa'nın şifresini çözen yapay zekâ</h1>
+    <p class="lead">13 kat, 2 blok, <b>4.700 dükkân</b>. Esnafın bile "çözmem 4-5 yılımı aldı" dediği labirent.
+      Alışveriş listeni okut, PerpAI seni dükkân dükkân en kısa yoldan gezdirsin.</p>
+    <div id="qrBanner" class="qrbanner" hidden></div>
+    <div class="cta">
+      <button id="btnShop" class="btn primary" disabled><span class="ic">🛒</span> Alışverişe başla</button>
+      <button id="btnStory" class="btn ghost" disabled><span class="ic">📜</span> Halil Rıfat Paşa Görevi</button>
+      <button id="btnIntroQR" class="btn ghost" disabled><span class="ic">📷</span> QR okut</button>
+    </div>
+    <div id="loading" class="loading"><div class="bar"><i></i></div><span>Bina modelleniyor…</span></div>
+    <p class="fine">Gerçek veri: perpa.com.tr firma rehberindeki 2.457 firma (blok · kat · dükkân no · sektör). Yerleşim resmi kat planlarından modellendi; ölçüler yaklaşıktır.</p>
+  </div>
+  <div class="credit">Fotoğraflar: <a href="https://commons.wikimedia.org/wiki/File:PerPa_(2).jpg" target="_blank" rel="noopener">CeeGee</a> (CC BY-SA 4.0), <a href="https://commons.wikimedia.org/wiki/File:PERPA.jpg" target="_blank" rel="noopener">Sezenkerem</a> (CC BY-SA 3.0) · Wikimedia Commons</div>
+</section>
+
+<!-- dış mekân altyazı -->
+<div id="caption" class="caption"></div>
+
+<!-- 2. Liste okutma -->
+<section id="scan" class="screen">
+  <div class="scan-wrap">
+    <div class="phone">
+      <div class="notch"></div>
+      <div class="viewfinder">
+        <div class="paper" id="paper"></div>
+        <div class="laser" id="laser"></div>
+        <div class="corners"><i></i><i></i><i></i><i></i></div>
+        <div class="vf-label" id="vfLabel">Listeyi çerçeveye al</div>
+      </div>
+      <button id="btnScan" class="shutter" title="Okut"><span></span></button>
+    </div>
+    <div class="scan-side">
+      <h2 id="scanTitle">Alışveriş listen</h2>
+      <div class="where"><span>📍 Başlangıç: <b id="scanWhere">8. kat · ana giriş</b></span><button id="btnWhere" type="button">QR ile değiştir</button></div>
+      <div class="presets" id="presets"></div>
+      <div class="pick" id="pickMode"><span>Dükkân seçimi:</span><button class="chip on" data-v="uzman" title="Ürünle en çok eşleşen uzman firmalar">⭐ Uzman firma</button><button class="chip" data-v="yakin" title="Turu en kısaltan uygun dükkânlar">📍 En yakın</button></div>
+      <textarea id="listText" spellcheck="false"></textarea>
+      <div class="hint">Satır satır yaz: ürün, firma adı ya da dükkân no (ör. <code>B 1450</code>).</div>
+      <div id="results" class="results"></div>
+      <div class="row">
+        <button id="btnScan2" class="btn primary"><span class="ic">📷</span> Listeyi okut</button>
+        <button id="btnRoute" class="btn accent" disabled><span class="ic">🧭</span> Rotayı çiz</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. Rota planı (x-ray) -->
+<section id="plan" class="screen">
+  <div class="plan-card">
+    <div class="eyebrow">PerpAI rota</div>
+    <h2 id="planTitle">En kısa tur hazır</h2>
+    <div class="stats" id="planStats"></div>
+    <ol class="stops" id="planStops"></ol>
+    <div class="row">
+      <button id="btnWalk" class="btn primary"><span class="ic">🚶</span> Yürümeye başla</button>
+      <button id="btnBack" class="btn ghost">Listeyi değiştir</button>
+    </div>
+  </div>
+  <div class="plan-legend">Sürükle: döndür · Tekerlek: yakınlaş · Katlar dikeyde açılmış gösteriliyor</div>
+</section>
+
+<!-- 4. Oyun HUD -->
+<section id="hud" class="screen">
+  <div class="hud-top">
+    <div class="target" id="target"></div>
+    <div class="instr" id="instr"></div>
+  </div>
+  <div class="checklist" id="checklist"></div>
+  <div class="mapbox">
+    <div class="floorbar" id="floorbar"></div>
+    <div class="minimap"><canvas id="minimap" width="664" height="240"></canvas><div class="mm-floor" id="mmFloor"></div></div>
+  </div>
+  <div class="controls">
+    <button id="cPlay" title="Duraklat (boşluk)">⏸</button>
+    <div class="seg" id="cSpeed"><button data-v="1">1×</button><button data-v="2">2×</button><button data-v="4" class="on">4×</button><button data-v="8">8×</button></div>
+    <div class="seg" id="cCam"><button data-v="follow" class="on" title="3. şahıs (1)">🎥</button><button data-v="fps" title="Göz hizası (2)">👁</button><button data-v="top" title="Kuş bakışı (3)">🗺</button><button data-v="orbit" title="Serbest (4)">🖐</button></div>
+    <button id="cQR" title="QR okut, konumu düzelt">📷 QR</button>
+    <button id="cXray" title="Rotanın tamamı (R)">🧊 Rota</button>
+  </div>
+  <div id="toasts" class="toasts"></div>
+</section>
+
+<!-- 5. Bitiş -->
+<section id="done" class="screen">
+  <div class="done-card">
+    <div class="medal" id="doneMedal">🏅</div>
+    <h2 id="doneTitle">Liste tamam!</h2>
+    <p id="doneText"></p>
+    <div class="stats" id="doneStats"></div>
+    <div class="row"><button id="btnAgain" class="btn primary">Yeni liste</button><button id="btnStory2" class="btn ghost">📜 Paşa Görevi</button></div>
+    <p class="fine">İlham: Sapien — Komple Teori, <a href="https://www.youtube.com/watch?v=eaPLrON3r4E" target="_blank" rel="noopener">"Perpa'nın Kadim Sırrı"</a> (mizah). Firma verisi: perpa.com.tr.</p>
+  </div>
+</section>
+
+<div id="stairFade" class="stairfade"><div id="stairText"></div></div>
+
+<script>
+  // modül yüklenemez ya da çökerse yükleme ekranında takılı kalmasın
+  (function () {
+    function fail(msg) {
+      var l = document.getElementById('loading'); if (!l || l.classList.contains('done')) return;
+      l.querySelector('.bar').style.display = 'none';
+      var s = l.querySelector('span'); s.style.color = '#ffb4a8';
+      var gl = /webgl/i.test(msg);
+      s.innerHTML = (gl
+        ? '3D başlatılamadı: tarayıcın WebGL açamıyor.<br><small>Chrome\'da Ayarlar → Sistem → "Donanım hızlandırmayı kullan"ı aç ve yeniden başlat, ya da <code>chrome://gpu</code> sayfasında WebGL durumunu kontrol et.</small>'
+        : 'Yükleme hatası: ' + msg + '<br><small>Sayfayı Ctrl+Shift+R ile yenile.</small>');
+    }
+    window.__perpaiFail = fail;
+    window.addEventListener('error', function (e) { fail(e.message || String(e.error)); });
+    window.addEventListener('unhandledrejection', function (e) { fail((e.reason && e.reason.message) || String(e.reason)); });
+    var c = document.createElement('canvas');
+    if (!(c.getContext('webgl2') || c.getContext('webgl'))) setTimeout(function () { fail('WebGL'); }, 0);
+    setTimeout(function () { fail('Zaman aşımı (20 sn). Three.js CDN\'e (cdn.jsdelivr.net) erişilebiliyor mu?'); }, 20000);
+  })();
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

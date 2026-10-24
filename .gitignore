@@ -1,0 +1,11 @@
+# bağımlılıklar ve derleme çıktıları
+node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/ios/
+mobile/android/
+__pycache__/
+*.log
+.DS_Store
+.env*.local

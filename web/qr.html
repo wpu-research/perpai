@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PerpAI QR Kartları</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Space+Grotesk:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<style>
+  :root { --ink: #0e1726; --muted: #5b6778; --line: #e2e7ee; --bg: #f3f5f8; --orange: #d2500a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Inter, system-ui, sans-serif; }
+  header { padding: 24px 16px 12px; max-width: 1100px; margin: 0 auto; display: grid; gap: 12px; }
+  h1 { margin: 0; font-family: 'Space Grotesk', Inter, sans-serif; font-size: 28px; }
+  h1 span { color: var(--orange); }
+  header p { margin: 0; color: var(--muted); line-height: 1.5; max-width: 760px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bar label { font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+  select, input { height: 40px; border-radius: 10px; border: 1px solid #d5dce5; padding: 0 10px; font: 500 14px Inter, sans-serif; background: #fff; color: var(--ink); }
+  button { height: 40px; border-radius: 10px; border: 0; padding: 0 16px; font: 700 14px Inter, sans-serif; background: var(--orange); color: #fff; cursor: pointer; }
+  .count { font-size: 13px; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 8px 16px 40px; display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .card { background: #fff; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); break-inside: avoid; display: flex; flex-direction: column; }
+  .card .top { padding: 8px 12px; color: #fff; font-weight: 800; display: flex; justify-content: space-between; font-size: 13px; }
+  .card .top b { font-family: 'Space Grotesk', Inter, sans-serif; font-size: 15px; }
+  .card .qr { display: grid; place-items: center; padding: 12px 12px 4px; }
+  .card .qr svg { width: 170px; height: 170px; }
+  .card .body { padding: 4px 12px 12px; text-align: center; display: grid; gap: 3px; }
+  .card .code { font-family: 'Space Grotesk', Inter, sans-serif; font-size: 22px; font-weight: 700; }
+  .card .lbl { font-size: 13px; font-weight: 700; }
+  .card .sub { font-size: 12px; color: var(--muted); min-height: 15px; }
+  .card .try { font-size: 12px; font-weight: 700; color: #075e75; }
+  .empty { grid-column: 1 / -1; color: var(--muted); }
+  @media print {
+    header, .try { display: none !important; }
+    body { background: #fff; }
+    main { grid-template-columns: repeat(3, 1fr); gap: 10mm; padding: 0; max-width: none; }
+    .card { border: 1px solid #999; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Perp<span>AI</span> QR kartları</h1>
+  <p>Kartları yazdırıp ilgili yere as (yaklaşık 15×15 cm, 1,4 m yükseklik). Telefon kamerasıyla okutunca PerpAI o noktadan açılır; uygulamadaki <b>📷 QR</b> düğmesiyle okutunca konum ve rota güncellenir. Masaüstünde denemek için karttaki "buradan başla" linkine tıkla.</p>
+  <div class="bar">
+    <label>Set <select id="set"><option value="demo">Demo seti</option><option value="all">Tümü (filtreli)</option></select></label>
+    <label>Kat <select id="floor"><option value="">Hepsi</option></select></label>
+    <label>Tür <select id="kind"><option value="">Hepsi</option></select></label>
+    <label>Ara <input id="q" placeholder="A 1350, E19, firma…"></label>
+    <button onclick="print()">Yazdır</button>
+    <span class="count" id="count"></span>
+  </div>
+</header>
+<main id="grid"><div class="empty">Yükleniyor…</div></main>
+<script type="module">
+import { loadData } from './js/data.js';
+import { qrList, qrURL, KIND_LABEL } from './js/qr.js';
+import { ZONE_COLORS } from './js/layout.js';
+
+await loadData();
+const all = qrList();
+const $ = s => document.querySelector(s);
+for (let f = 1; f <= 13; f++) $('#floor').insertAdjacentHTML('beforeend', `<option value="${f}">${f}. kat</option>`);
+for (const [k, v] of Object.entries(KIND_LABEL)) $('#kind').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`);
+
+// Demo seti: güvenlik listesinin dükkânları + kırtasiye, kullanılan asansörler, birkaç kapı
+const DEMO = ['GIRIS', 'D-A7-1000', 'D-A11-1350', 'D-B5-125', 'D-B8-953', 'D-A5-445', 'E19-7', 'E19-11', 'E16-5', 'E15-8', 'K2-8', 'YK8-A'];
+const hex = c => '#' + c.toString(16).padStart(6, '0');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function card(q) {
+  const qr = qrcode(0, 'M'); qr.addData(qrURL(q.code)); qr.make();
+  const color = q.zone ? hex(ZONE_COLORS[q.zone]) : '#0e1726';
+  const dark = q.zone === 'SARI';
+  return `<article class="card">
+    <div class="top" style="background:${color};color:${dark ? '#2a1d00' : '#fff'}"><b>PerpAI</b><span>${esc(KIND_LABEL[q.kind])}</span></div>
+    <div class="qr">${qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true })}</div>
+    <div class="body">
+      <div class="code">${esc(q.kind === 'kapi' ? `${q.block} ${q.no}` : q.code)}</div>
+      <div class="lbl">${esc(q.label)}</div>
+      <div class="sub">${esc(q.sub || '')}</div>
+      <a class="try" href="${qrURL(q.code)}" target="_blank" rel="noopener">buradan başla → ${esc(q.code)}</a>
+    </div></article>`;
+}
+
+function render() {
+  const set = $('#set').value, f = $('#floor').value, k = $('#kind').value, t = $('#q').value.trim().toLocaleUpperCase('tr-TR');
+  let list = set === 'demo' ? DEMO.map(c => all.find(q => q.code === c)).filter(Boolean) : all;
+  if (f) list = list.filter(q => q.floor === +f);
+  if (k) list = list.filter(q => q.kind === k);
+  if (t) {
+    const nm = t.match(/^([AB])\s*(\d+)$/);
+    list = list.filter(q => nm ? (q.block === nm[1] && String(q.no).startsWith(nm[2])) : (q.code.includes(t) || (q.sub || '').toLocaleUpperCase('tr-TR').includes(t) || q.label.toLocaleUpperCase('tr-TR').includes(t)));
+  }
+  const shown = list.slice(0, 120);
+  $('#count').textContent = `${list.length} kart${list.length > shown.length ? ` (ilk ${shown.length} gösteriliyor)` : ''}`;
+  $('#grid').innerHTML = shown.length ? shown.map(card).join('') : '<div class="empty">Eşleşen kart yok.</div>';
+}
+for (const id of ['set', 'floor', 'kind']) $('#' + id).onchange = render;
+$('#q').oninput = render;
+render();
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
+import { ARPath, type Pose } from '@/ARPath';
 import { FloorMap } from '@/FloorMap';
 import * as G from '@/guide';
 import { API_BASE, parseScanned, planRoute, shopName, toPlace, type Place, type QRPlace } from '@/perpa';
@@ -64,14 +65,17 @@ export default function ARWalk() {
   // --- sensörler: pusula (kamera yönü) ve adım
   const [compass, setCompass] = useState(0);
   const compassRef = useRef(0);
+  const poseRef = useRef<Pose>({ compass: 0, beta: Math.PI / 2 }); // 3D yol çizimi için (ARPath)
   useEffect(() => {
-    DeviceMotion.setUpdateInterval(80);
-    let sx = 0, sy = 1, lastSet = 0;
+    DeviceMotion.setUpdateInterval(50);
+    let sx = 0, sy = 1, lastSet = 0, beta = Math.PI / 2;
     const sub = DeviceMotion.addListener(({ rotation }) => {
       if (!rotation) return;
       const h = G.cameraHeading(rotation.alpha, rotation.beta, rotation.gamma) * Math.PI / 180;
       sx = sx * 0.8 + Math.sin(h) * 0.2; sy = sy * 0.8 + Math.cos(h) * 0.2; // açısal alçak geçiren süzgeç
       compassRef.current = ((Math.atan2(sx, sy) * 180 / Math.PI) + 360) % 360;
+      beta = beta * 0.7 + rotation.beta * 0.3;
+      poseRef.current = { compass: compassRef.current, beta };
       const now = Date.now();
       if (now - lastSet > 100) { lastSet = now; setCompass(compassRef.current); }
     });
@@ -233,6 +237,9 @@ export default function ARWalk() {
         <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
           onBarcodeScanned={({ data }) => onQR(data)} />
       ) : null}
+      {perm?.granted && walk && calib != null && !arrived ? (
+        <ARPath walk={walk} s={s} calib={calib} pose={poseRef} target={isFinal ? G.pointAt(walk, walk.length) : null} />
+      ) : null}
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         {/* üst: komut */}
         <View style={st.top}>
@@ -278,7 +285,8 @@ export default function ARWalk() {
           ) : arrived ? (
             <View style={st.rideBox}><Icon name="flag-checkered" size={72} color="#FFFFFF" /></View>
           ) : (
-            <FloorArrow angle={rel} dim={calib == null} />
+            // yön ayarlıyken yol yere çiziliyor; ok küçülüp aşağıda yön göstergesi olur
+            <FloorArrow angle={rel} dim={calib == null} small={calib != null} />
           )}
         </View>
 
@@ -315,9 +323,9 @@ export default function ARWalk() {
 }
 
 // zemine yatırılmış, telefona göre dönen ok
-function FloorArrow({ angle, dim }: { angle: number; dim: boolean }) {
+function FloorArrow({ angle, dim, small }: { angle: number; dim: boolean; small?: boolean }) {
   return (
-    <View style={{ opacity: dim ? 0.75 : 1, transform: [{ perspective: 700 }, { rotateX: '58deg' }, { rotateZ: `${angle}deg` }] }}>
+    <View style={{ opacity: dim ? 0.75 : 1, transform: [{ translateY: small ? 300 : 0 }, { scale: small ? 0.4 : 1 }, { perspective: 700 }, { rotateX: '58deg' }, { rotateZ: `${angle}deg` }] }}>
       <Svg width={200} height={280} viewBox="0 0 100 140">
         <Defs>
           <LinearGradient id="g" x1="0" y1="0" x2="0" y2="1">

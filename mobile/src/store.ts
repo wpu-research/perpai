@@ -36,6 +36,7 @@ type State = {
   location: (Place & { at: number }) | null;   // son QR konumu
   calib: number | null;                        // kamera yönü: pusula -> model açısı farkı (guide.ts)
   stride: number;                              // adım boyu (m), iki QR arasından öğrenilir
+  merchantToken: string | null;                // esnaf oturumu (server/merchant.js)
   createList: (text: string, title: string, pick: 'uzman' | 'yakin') => string;
   rematch: (id: string, pick: 'uzman' | 'yakin') => void;
   nextAlternative: (listId: string, itemId: string) => void;
@@ -45,6 +46,7 @@ type State = {
   setLocation: (p: Place | null) => void;
   setCalib: (c: number | null) => void;
   setStride: (m: number) => void;
+  setMerchantToken: (t: string | null) => void;
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -70,6 +72,7 @@ export const useStore = create<State>()(persist((set, get) => ({
   location: null,
   calib: null,
   stride: 0.7,
+  merchantToken: null,
   createList: (text, title, pick) => {
     const id = uid();
     const list: ShopList = { id, title: title.trim() || 'Alışveriş listesi', createdAt: Date.now(), status: 'planned', pick, items: match(text, pick, get().hints), here: null };
@@ -113,6 +116,7 @@ export const useStore = create<State>()(persist((set, get) => ({
   setLocation: p => set({ location: p ? { ...p, at: Date.now() } : null }),
   setCalib: c => set({ calib: c }),
   setStride: m => set({ stride: m }),
+  setMerchantToken: t => set({ merchantToken: t }),
 }), { name: 'perpai-v1', storage: createJSONStorage(() => AsyncStorage) }));
 
 export const useList = (id?: string) => useStore(s => s.lists.find(l => l.id === id));

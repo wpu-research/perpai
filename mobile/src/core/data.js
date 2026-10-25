@@ -189,6 +189,13 @@ export function candidatesFor(item) {
     all.sort((x, y) => Math.abs(x.no - no) - Math.abs(y.no - no));
     return { cat: 'Dükkan numarası', list: all.slice(0, 1).map(s => ({ shop: s, score: 9 })) };
   }
+  // esnafın kendi girdiği üründen gelen dükkânlar (sunucu, item.ai.shops) en üstte
+  const direct = [];
+  for (const d of item.ai?.shops ?? []) {
+    const pool = (DB.floors[d.floor] || []).filter(s => s.block === d.block);
+    const shop = pool.find(s => s.no === d.no) ?? pool.sort((x, y) => Math.abs(x.no - d.no) - Math.abs(y.no - d.no))[0];
+    if (shop && !direct.some(c => c.shop === shop)) direct.push({ shop, score: 9, product: d.product, price: d.price });
+  }
   const rule = ruleFor(item, low);
   const tokens = up.split(/[^A-ZÇĞİÖŞÜ0-9]+/).filter(t => t.length >= 4);
   const out = [];
@@ -205,7 +212,8 @@ export function candidatesFor(item) {
     if (sc >= 2) out.push({ shop: f.shop, score: sc, h: hash(f.i) });
   }
   out.sort((a, b) => b.score - a.score || a.h - b.h);
-  return { cat: rule ? rule.cat : (out.length ? 'Firma adı' : null), list: out.slice(0, 60) };
+  const list = [...direct, ...out.filter(c => !direct.some(d => d.shop === c.shop))].slice(0, 60);
+  return { cat: direct.length ? 'Esnaf ürünü' : rule ? rule.cat : (out.length ? 'Firma adı' : null), list };
 }
 
 const pos = s => ({ x: s.slot.door.x, z: s.slot.door.z, floor: s.floor });

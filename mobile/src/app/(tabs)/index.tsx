@@ -91,6 +91,17 @@ export default function Home() {
             </Pressable>
           );
         })() : null}
+
+        <Pressable accessibilityRole="button" onPress={() => router.push('/esnaf')}>
+          <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Icon name="storefront-outline" size={26} color={C.brand} />
+            <View style={{ flex: 1 }}>
+              <Text style={font.h2}>Perpa esnafı mısın?</Text>
+              <Text style={font.small}>Dükkânını sahiplen, ürünlerini gir; listelerde öne çık.</Text>
+            </View>
+            <Icon name="chevron-right" color={C.muted} />
+          </Card>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

@@ -1,6 +1,6 @@
 // Çekirdek modüllere (src/core, web/js'den kopya) tipli giriş noktası
 import firmsJson from './core/firms.json';
-import { loadData, DB as RawDB, parseList, candidatesFor, chooseShops, shopTitle, PRESETS, aiHints as rawAiHints } from './core/data.js';
+import { loadData, DB as RawDB, parseList, candidatesFor, chooseShops, shopTitle, PRESETS, aiHints as rawAiHints, API_BASE } from './core/data.js';
 import { planRoute, legInstructions } from './core/nav.js';
 import { ENTRY, FLOORS, getLayout, variantOf, zoneAt, CELLS, GATES, WELLS, HALL, DIM, GX0, GZ0, GW, GH, floorY } from './core/layout.js';
 import { qrList, resolveQR, parseScanned, KIND_LABEL } from './core/qr.js';
@@ -58,6 +58,7 @@ export function searchShops(q: string, limit = 20): Shop[] {
 }
 
 export {
+  API_BASE,
   parseList, candidatesFor, chooseShops, PRESETS, planRoute, legInstructions, ENTRY, FLOORS, getLayout, variantOf, zoneAt,
   CELLS, GATES, WELLS, HALL, DIM, GX0, GZ0, GW, GH, floorY, qrList, resolveQR, parseScanned, KIND_LABEL,
 };

@@ -67,7 +67,7 @@ for (let f = 1; f <= 13; f++) $('#floor').insertAdjacentHTML('beforeend', `<opti
 for (const [k, v] of Object.entries(KIND_LABEL)) $('#kind').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`);
 
 // Demo seti: güvenlik listesinin dükkânları + kırtasiye, kullanılan asansörler, birkaç kapı
-const DEMO = ['GIRIS', 'D-A7-1000', 'D-A11-1350', 'D-B5-125', 'D-B8-953', 'D-A5-445', 'E19-7', 'E19-11', 'E16-5', 'E15-8', 'K2-8', 'YK8-A'];
+const DEMO = ['GIRIS', 'D-A7-1000', 'D-A11-1350', 'D-B5-125', 'D-B8-953', 'D-A5-445', 'E19-8', 'E19-11', 'E16-5', 'E15-8', 'K2-8', 'YK8-A'];
 const hex = c => '#' + c.toString(16).padStart(6, '0');
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 

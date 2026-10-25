@@ -1,5 +1,6 @@
 // PerpAI API: alışveriş listesi satırlarını Claude ile Perpa sektörlerine ve firma adı ipuçlarına eşler.
 // POST /api/hints  {lines: string[]}  ->  {hints: [{i, label, cat, sectors, terms}]}
+// POST /api/trace  {app, events: []}   ->  saha testi kaydı (Railway günlüğüne yazılır)
 // Uygulama bu ipuçlarıyla kendi dükkân seçimini yapar; sunucuya ulaşamazsa kural tabanlı eşleştirmeye düşer.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -76,13 +77,24 @@ function send(res, code, body) {
 http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return send(res, 204, {});
   if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true, model: MODEL });
-  if (req.method !== 'POST' || req.url !== '/api/hints') return send(res, 404, { error: 'bulunamadı' });
+  if (req.method !== 'POST' || (req.url !== '/api/hints' && req.url !== '/api/trace')) return send(res, 404, { error: 'bulunamadı' });
 
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
   if (limited(ip)) return send(res, 429, { error: 'çok fazla istek, biraz sonra dene' });
 
+  const limit = req.url === '/api/trace' ? 400000 : 20000;
   let raw = '';
-  for await (const chunk of req) { raw += chunk; if (raw.length > 20000) return send(res, 413, { error: 'liste çok uzun' }); }
+  for await (const chunk of req) { raw += chunk; if (raw.length > limit) return send(res, 413, { error: 'istek çok büyük' }); }
+
+  // saha testi kaydı (uygulamada kullanıcı açıkça başlatır): Railway günlüğüne tek satır JSON
+  if (req.url === '/api/trace') {
+    try {
+      const t = JSON.parse(raw);
+      if (!Array.isArray(t.events)) throw new Error('events');
+      console.log('TRACE ' + JSON.stringify({ at: new Date().toISOString(), app: String(t.app || '').slice(0, 20), events: t.events.slice(0, 5000) }));
+      return send(res, 200, { ok: true, n: t.events.length });
+    } catch { return send(res, 400, { error: 'geçersiz kayıt' }); }
+  }
   let lines;
   try { lines = JSON.parse(raw).lines; } catch { return send(res, 400, { error: 'geçersiz JSON' }); }
   if (!Array.isArray(lines) || !lines.length || lines.length > MAX_LINES || lines.some(l => typeof l !== 'string')) {

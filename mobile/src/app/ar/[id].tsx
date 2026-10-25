@@ -12,13 +12,14 @@ import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 
 import { FloorMap } from '@/FloorMap';
 import * as G from '@/guide';
-import { parseScanned, shopName, toPlace, type QRPlace } from '@/perpa';
+import { API_BASE, parseScanned, planRoute, shopName, toPlace, type Place, type QRPlace } from '@/perpa';
 import { planFor, rideIcon, startOf } from '@/route';
 import { useList, useStore } from '@/store';
 import { C } from '@/theme';
 import { Button, Icon, type IconName } from '@/ui';
 
-const STRIDE = 0.7; // m / adım
+
+const clock = () => Date.now();
 
 export default function ARWalk() {
   useKeepAwake();
@@ -26,7 +27,8 @@ export default function ARWalk() {
   const list = useList(id);
   const location = useStore(s => s.location);
   const calib = useStore(s => s.calib);
-  const { setCalib, setLocation, setList } = useStore();
+  const stride = useStore(s => s.stride);
+  const { setCalib, setLocation, setList, setStride } = useStore();
   const [perm, requestPerm] = useCameraPermissions();
 
   const here = list ? startOf(list, location) : null;
@@ -76,13 +78,45 @@ export default function ARWalk() {
     return () => sub.remove();
   }, []);
 
-  const walkRef = useRef<{ walk: G.WalkPhase | null; arrived: boolean }>({ walk: null, arrived: false });
-  useEffect(() => { walkRef.current = { walk, arrived }; }, [walk, arrived]);
+  // --- saha testi kaydı (kullanıcı açar; kapanınca sunucuya gider)
+  const [rec, setRec] = useState(false);
+  const events = useRef<object[]>([]);
+  const recRef = useRef(false);
+  const t0 = useRef(0);
+  const log = (type: string, data: object) => {
+    if (!recRef.current) return;
+    events.current.push({ t: clock() - t0.current, type, ...data });
+  };
+  const upload = () => {
+    const ev = events.current; events.current = [];
+    if (!ev.length) return;
+    fetch(API_BASE + '/api/trace', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ app: '0.5.0', events: ev }) }).catch(() => {});
+  };
+  const toggleRec = () => {
+    if (recRef.current) { recRef.current = false; setRec(false); upload(); setToast('Test kaydı gönderildi'); setTimeout(() => setToast(null), 2500); return; }
+    events.current = []; t0.current = clock(); recRef.current = true; setRec(true);
+    log('start', { stride, calib, here: here && { x: here.x, z: here.z, floor: here.floor, code: here.code }, target: stop?.key ?? 'cikis' });
+  };
+  useEffect(() => () => { if (recRef.current) { recRef.current = false; upload(); } }, []);
+  // pusula ve ilerleme örneği, saniyede bir
+  const sample = useRef({ compass: 0, s: 0, pi: 0 });
+  useEffect(() => { sample.current = { compass: Math.round(compass), s: Math.round(s * 10) / 10, pi }; }, [compass, s, pi]);
+  useEffect(() => {
+    if (!rec) return;
+    const iv = setInterval(() => log('pose', sample.current), 1000);
+    return () => clearInterval(iv);
+  }, [rec]);
+
+  const walkRef = useRef<{ walk: G.WalkPhase | null; arrived: boolean; stride: number }>({ walk: null, arrived: false, stride: 0.7 });
+  useEffect(() => { walkRef.current = { walk, arrived, stride }; }, [walk, arrived, stride]);
+  const stepsSinceQR = useRef(0);
   useEffect(() => {
     Accelerometer.setUpdateInterval(40);
     const det = new G.StepDetector(() => {
-      const { walk: w, arrived: a } = walkRef.current;
-      if (w && !a) setS(v => Math.min(w.length, v + STRIDE));
+      const { walk: w, arrived: a, stride: m } = walkRef.current;
+      stepsSinceQR.current++;
+      log('step', {});
+      if (w && !a) setS(v => Math.min(w.length, v + m));
     });
     const sub = Accelerometer.addListener(({ x, y, z }) => det.push(x, y, z));
     return () => sub.remove();
@@ -147,6 +181,7 @@ export default function ARWalk() {
 
   // --- kamerada QR: konumu ve yönü düzelt
   const lastQR = useRef({ code: '', at: 0 });
+  const lastPlace = useRef<Place | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const onQR = (data: string) => {
     const q = parseScanned(data) as QRPlace | null;
@@ -155,6 +190,20 @@ export default function ARWalk() {
     if (q.code === lastQR.current.code && now - lastQR.current.at < 15000) return;
     lastQR.current = { code: q.code, at: now };
     const p = toPlace(q);
+    // tahmini konumun QR'dan sapması (saha testi için)
+    const guess = walk ? G.pointAt(walk, s) : null;
+    const err = guess && walk && walk.floor === q.floor ? Math.round(Math.hypot(guess.x - q.x, guess.z - q.z) * 10) / 10 : null;
+    // adım boyunu öğren: aynı kattaki iki QR arasında yürünen yol / atılan adım
+    const prevQR = lastPlace.current, n = stepsSinceQR.current;
+    if (prevQR && prevQR.floor === q.floor && n >= 20) {
+      const leg = (planRoute(prevQR, [], false, p) as { legs: { segments: { type: string; length?: number }[] }[] }).legs[0];
+      const d = leg.segments.reduce((a, g) => a + (g.type === 'walk' ? g.length ?? 0 : 0), 0);
+      const m = d / n;
+      if (d >= 15 && m > 0.45 && m < 0.95) setStride(Math.round((stride * 0.5 + m * 0.5) * 100) / 100);
+      log('stride', { d: Math.round(d), n, m: Math.round(m * 100) / 100 });
+    }
+    lastPlace.current = p; stepsSinceQR.current = 0;
+    log('qr', { code: q.code, err, compass: Math.round(compassRef.current) });
     setLocation(p);
     setList(list.id, { here: p });
     setCalib(G.calibrate(q.heading, compassRef.current)); // QR'a bakarken telefonun yönü = QR'ın yönü
@@ -173,6 +222,7 @@ export default function ARWalk() {
         : isFinal ? `${G.roundM(remaining)} m · hedef ${destSide ?? 'ileride'}` : `${G.roundM(remaining)} m düz ilerleyin`;
 
   const finish = () => {
+    log('arrive', { s: Math.round(s) });
     if (stop) router.dismissTo({ pathname: '/navigate/[id]', params: { id: list.id, arrived: '1' } });
     else { setList(list.id, { status: 'done', here: null }); router.dismissTo({ pathname: '/list/[id]', params: { id: list.id } }); }
   };
@@ -191,6 +241,9 @@ export default function ARWalk() {
             <Text style={st.instrText} numberOfLines={2}>{instr}</Text>
             <Text style={st.instrSub} numberOfLines={1}>{stop ? destName : 'Çıkış'} · {mapFloor}. kat</Text>
           </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={rec ? 'Test kaydını bitir ve gönder' : 'Test kaydını başlat'} onPress={toggleRec} style={[st.round, rec && { backgroundColor: '#C62828' }]}>
+            <Icon name={rec ? 'stop' : 'record-rec'} color="#FFFFFF" />
+          </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Sesi aç' : 'Sesi kapat'} onPress={() => { setMuted(m => !m); Speech.stop(); }} style={st.round}>
             <Icon name={muted ? 'volume-off' : 'volume-high'} color="#FFFFFF" />
           </Pressable>
@@ -238,22 +291,22 @@ export default function ARWalk() {
           </View>
           <View style={{ flex: 1, gap: 8 }}>
             {phase.kind === 'ride' ? (
-              <Button title={`${phase.to}. kata vardım`} icon="check" onPress={() => { setPi(p => p + 1); setS(0); }} />
+              <Button title={`${phase.to}. kata vardım`} icon="check" onPress={() => { log('ride', { to: phase.to }); setPi(p => p + 1); setS(0); }} />
             ) : arrived ? (
               <Button title={stop ? 'Alışverişe geç' : 'Listeyi kapat'} icon="check" onPress={finish} />
             ) : (
               <>
                 <View style={st.progress}><View style={[st.progressFill, { width: `${walk ? Math.min(100, (s / walk.length) * 100) : 0}%` }]} /></View>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <Pressable accessibilityRole="button" accessibilityLabel="5 metre geri" onPress={() => setS(v => Math.max(0, v - 5))} style={st.chip}><Text style={st.chipText}>−5 m</Text></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel="5 metre ileri" onPress={() => setS(v => Math.min(walk?.length ?? 0, v + 5))} style={st.chip}><Text style={st.chipText}>+5 m</Text></Pressable>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Yönü ayarla" onPress={() => walk && setCalib(G.calibrate(G.aimAt(walk, s), compassRef.current))} style={[st.chip, { flex: 1 }]}>
+                  <Pressable accessibilityRole="button" accessibilityLabel="5 metre geri" onPress={() => { log('nudge', { d: -5 }); setS(v => Math.max(0, v - 5)); }} style={st.chip}><Text style={st.chipText}>−5 m</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="5 metre ileri" onPress={() => { log('nudge', { d: 5 }); setS(v => Math.min(walk?.length ?? 0, v + 5)); }} style={st.chip}><Text style={st.chipText}>+5 m</Text></Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Yönü ayarla" onPress={() => { if (!walk) return; log('calib', { compass: Math.round(compassRef.current) }); setCalib(G.calibrate(G.aimAt(walk, s), compassRef.current)); }} style={[st.chip, { flex: 1 }]}>
                     <Text style={st.chipText}>Yönü ayarla</Text>
                   </Pressable>
                 </View>
               </>
             )}
-            <Text style={st.hint}>Adımlarınla ilerler · QR görünce konum düzelir</Text>
+            <Text style={st.hint}>{rec ? '● Test kaydı açık · ' : ''}Adım {stride.toFixed(2)} m · QR görünce konum düzelir</Text>
           </View>
         </View>
       </SafeAreaView>

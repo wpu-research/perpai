@@ -65,6 +65,7 @@ export default function ARWalk() {
   // --- sensörler: pusula (kamera yönü) ve adım
   const [compass, setCompass] = useState(0);
   const compassRef = useRef(0);
+  const [glFailed, setGlFailed] = useState(false);
   const poseRef = useRef<Pose>({ compass: 0, beta: Math.PI / 2 }); // 3D yol çizimi için (ARPath)
   useEffect(() => {
     DeviceMotion.setUpdateInterval(50);
@@ -237,8 +238,8 @@ export default function ARWalk() {
         <CameraView style={StyleSheet.absoluteFill} facing="back" barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
           onBarcodeScanned={({ data }) => onQR(data)} />
       ) : null}
-      {perm?.granted && walk && calib != null && !arrived ? (
-        <ARPath walk={walk} s={s} calib={calib} pose={poseRef} target={isFinal ? G.pointAt(walk, walk.length) : null} />
+      {perm?.granted && walk && calib != null && !arrived && !glFailed ? (
+        <ARPath walk={walk} s={s} calib={calib} pose={poseRef} target={isFinal ? G.pointAt(walk, walk.length) : null} onFail={() => setGlFailed(true)} />
       ) : null}
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         {/* üst: komut */}
@@ -285,8 +286,8 @@ export default function ARWalk() {
           ) : arrived ? (
             <View style={st.rideBox}><Icon name="flag-checkered" size={72} color="#FFFFFF" /></View>
           ) : (
-            // yön ayarlıyken yol yere çiziliyor; ok küçülüp aşağıda yön göstergesi olur
-            <FloorArrow angle={rel} dim={calib == null} small={calib != null} />
+            // yön ayarlıyken yol yere çiziliyor (ARPath); çizilemiyorsa ya da ayar yoksa ekranda ok
+            calib != null && !glFailed ? null : <FloorArrow angle={rel} dim={calib == null} />
           )}
         </View>
 
@@ -323,9 +324,9 @@ export default function ARWalk() {
 }
 
 // zemine yatırılmış, telefona göre dönen ok
-function FloorArrow({ angle, dim, small }: { angle: number; dim: boolean; small?: boolean }) {
+function FloorArrow({ angle, dim }: { angle: number; dim: boolean }) {
   return (
-    <View style={{ opacity: dim ? 0.75 : 1, transform: [{ translateY: small ? 300 : 0 }, { scale: small ? 0.4 : 1 }, { perspective: 700 }, { rotateX: '58deg' }, { rotateZ: `${angle}deg` }] }}>
+    <View style={{ opacity: dim ? 0.75 : 1, transform: [{ perspective: 700 }, { rotateX: '58deg' }, { rotateZ: `${angle}deg` }] }}>
       <Svg width={200} height={280} viewBox="0 0 100 140">
         <Defs>
           <LinearGradient id="g" x1="0" y1="0" x2="0" y2="1">

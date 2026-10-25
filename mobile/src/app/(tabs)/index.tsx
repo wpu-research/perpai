@@ -71,7 +71,7 @@ export default function Home() {
             {sectors.map((s, i) => (
               <Pressable key={s.id} accessibilityRole="button" onPress={() => router.push({ pathname: '/map', params: { sector: String(s.id) } })} style={st.sector}>
                 <View style={[st.sectorBar, { backgroundColor: SECTOR_COLORS[i % SECTOR_COLORS.length] }]} />
-                <Text style={st.sectorName} numberOfLines={2}>{s.name.charAt(0) + s.name.slice(1).toLocaleLowerCase('tr-TR')}</Text>
+                <Text style={st.sectorName} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.75}>{s.name.charAt(0) + s.name.slice(1).toLocaleLowerCase('tr-TR')}</Text>
                 <Text style={st.sectorCount}>{s.count}</Text>
               </Pressable>
             ))}

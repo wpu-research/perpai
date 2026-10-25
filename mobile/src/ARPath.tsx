@@ -15,6 +15,7 @@ type Props = {
   calib: number;
   pose: React.RefObject<Pose>;
   target: { x: number; z: number } | null; // varış noktası (son yürüyüşte)
+  onFail?: () => void;                        // GL açılamazsa: ekran düz oka döner
 };
 
 const EYE = 1.4, AHEAD = 36, STEP = 1.6;
@@ -28,13 +29,18 @@ function chevron(): THREE.BufferGeometry {
   return g;
 }
 
-export function ARPath({ walk, s, calib, pose, target }: Props) {
+export function ARPath({ walk, s, calib, pose, target, onFail }: Props) {
   const st = useRef({ s, walk, calib, target });
   useEffect(() => { st.current = { s, walk, calib, target }; }, [s, walk, calib, target]);
   const raf = useRef<number | null>(null);
   useEffect(() => () => { if (raf.current != null) cancelAnimationFrame(raf.current); }, []);
 
   const onContextCreate = (gl: ExpoWebGLRenderingContext) => {
+    try { start(gl); } catch (e) { console.warn('ARPath', e); onFail?.(); }
+  };
+
+  // three 0.162: expo-gl bağlamı WebGL 1 gibi görünüyor, sonraki sürümler WebGL 2 istiyor
+  const start = (gl: ExpoWebGLRenderingContext) => {
     const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
     const canvas = { width: w, height: h, style: {}, clientHeight: h, addEventListener: () => {}, removeEventListener: () => {} };
     const renderer = new THREE.WebGLRenderer({ canvas: canvas as unknown as HTMLCanvasElement, context: gl as unknown as WebGLRenderingContext, alpha: true, antialias: true });

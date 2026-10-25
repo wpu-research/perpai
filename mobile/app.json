@@ -2,7 +2,7 @@
   "expo": {
     "name": "PerpAI",
     "slug": "perpai",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "perpai",
@@ -23,7 +23,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.wpuresearch.perpai",
-      "versionCode": 4
+      "versionCode": 5
     },
     "web": {
       "output": "single",
@@ -45,6 +45,21 @@
           "cameraPermission": "PerpAI, Perpa'daki QR kodları okuyup konumunu bulmak için kamerayı kullanır.",
           "microphonePermission": false,
           "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Alışveriş listesinin fotoğrafını seçmek için galerine erişiriz. Fotoğraf telefonda kalır.",
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "-keep class com.google.mlkit.** { *; }\n-keep class com.google.android.gms.internal.mlkit_** { *; }\n-keep class com.google.android.gms.vision.** { *; }"
+          }
         }
       ]
     ],

@@ -24,6 +24,7 @@ export default function RootLayout() {
         <Stack.Screen name="route/[id]" options={{ title: 'Rota' }} />
         <Stack.Screen name="navigate/[id]" options={{ title: 'Navigasyon' }} />
         <Stack.Screen name="ar/[id]" options={{ headerShown: false, contentStyle: { backgroundColor: '#000' } }} />
+        <Stack.Screen name="scan" options={{ presentation: 'fullScreenModal', headerShown: false }} />
         <Stack.Screen name="qr" options={{ title: 'QR okut', presentation: 'fullScreenModal', headerShown: false }} />
         <Stack.Screen name="q/[code]" options={{ headerShown: false }} />
       </Stack>

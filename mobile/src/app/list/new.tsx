@@ -10,10 +10,13 @@ import { Button, Segmented } from '@/ui';
 type Preset = { title: string; text: string };
 
 export default function NewList() {
-  const { prefill } = useLocalSearchParams<{ prefill?: string }>();
+  const { prefill, scanned } = useLocalSearchParams<{ prefill?: string; scanned?: string }>();
   const createList = useStore(s => s.createList);
   const [title, setTitle] = useState('');
   const [text, setText] = useState(prefill ?? '');
+  // okutmadan dönüldü: okunan satırları mevcut metnin sonuna ekle
+  const [prevScan, setPrevScan] = useState(scanned);
+  if (scanned !== prevScan) { setPrevScan(scanned); if (prefill) setText(t => (t.trim() ? `${t.trim()}\n${prefill}` : prefill)); }
   const [pick, setPick] = useState<'uzman' | 'yakin'>('uzman');
   const lines = text.split(/\n|,|;/).filter(l => l.trim().length > 1).length;
 
@@ -38,6 +41,9 @@ export default function NewList() {
           ))}
         </View>
 
+        <Button title="Kâğıt listeyi kamerayla okut" icon="text-recognition" kind="dark" onPress={() => router.push('/scan')} />
+        {scanned ? <Text style={font.tiny}>Okunan satırları kontrol et; yanlış okunanı düzelt, gereksiz satırı sil.</Text> : null}
+
         <Text style={st.label}>Ürünler</Text>
         <TextInput value={text} onChangeText={setText} multiline textAlignVertical="top" accessibilityLabel="Ürünler"
           placeholder={'Her satıra bir ürün:\n4 adet IP kamera\n100 m Cat6 kablo\nB 1450 (dükkân no)'} placeholderTextColor={C.muted} style={[st.input, st.area]} />
@@ -46,9 +52,6 @@ export default function NewList() {
         <Text style={st.label}>Dükkân seçimi</Text>
         <Segmented value={pick} onChange={setPick} options={[{ v: 'uzman', label: 'Uzman firma' }, { v: 'yakin', label: 'En kısa rota' }]} />
 
-        <View style={st.note}>
-          <Text style={font.small}>Kâğıt listeyi kamerayla okutma, uygulamanın geliştirme derlemesinde (cihaz üstü metin tanıma) gelecek. Şimdilik yaz ya da yapıştır.</Text>
-        </View>
 
         <Button title={lines ? `Dükkânları bul · ${lines} ürün` : 'Dükkânları bul'} icon="store-search-outline" onPress={create} disabled={!lines} />
       </ScrollView>
@@ -65,5 +68,4 @@ const st = StyleSheet.create({
   chip: { minHeight: 40, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: C.lineStrong, backgroundColor: C.card, justifyContent: 'center' },
   chipOn: { borderColor: C.brand, backgroundColor: '#FDE7D9' },
   chipText: { fontSize: 13, fontWeight: '600', color: C.ink },
-  note: { backgroundColor: '#EEF2F6', borderRadius: 12, padding: 12, marginVertical: 4 },
 });

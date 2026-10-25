@@ -2,6 +2,7 @@
 // POST /api/hints  {lines: string[]}  ->  {hints: [{i, label, cat, sectors, terms}]}
 // POST /api/trace  {app, events: []}   ->  saha testi kaydı (Railway günlüğüne yazılır)
 // Esnaf (merchant.js): POST /api/merchant/claim · GET /api/merchant/me · POST/DELETE /api/merchant/products
+// Eşitleme (sync.js): POST /api/sync/register · POST /api/sync/restore · GET/PUT /api/sync/lists
 // Yönetim: GET /admin (onay sayfası, parola ADMIN_PASSWORD) · POST /admin/merchant/:id/approve|reject
 // Uygulama bu ipuçlarıyla kendi dükkân seçimini yapar; sunucuya ulaşamazsa kural tabanlı eşleştirmeye düşer.
 import http from 'node:http';
@@ -10,6 +11,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import * as M from './merchant.js';
+import * as S from './sync.js';
+S.useDb(M.db);
 
 const PORT = Number(process.env.PORT) || 8080;
 const MODEL = 'claude-haiku-5-5';
@@ -71,7 +74,7 @@ function send(res, code, body) {
   res.writeHead(code, {
     'content-type': 'application/json; charset=utf-8',
     'access-control-allow-origin': '*',
-    'access-control-allow-methods': 'POST, GET, DELETE, OPTIONS',
+    'access-control-allow-methods': 'POST, GET, PUT, DELETE, OPTIONS',
     'access-control-allow-headers': 'content-type, authorization',
   });
   res.end(JSON.stringify(body));
@@ -116,6 +119,19 @@ http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true, model: MODEL, db: M.hasDb() });
 
   const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim();
+  if (req.url.startsWith('/api/sync/')) {
+    if (!M.hasDb()) return send(res, 503, { error: 'veritabanı yok' });
+    try {
+      const url = req.url.split('?')[0];
+      if (req.method === 'GET' && url === '/api/sync/lists') return send(res, ...(await S.getLists(req)));
+      if (req.method === 'POST' && url === '/api/sync/register') { if (limited(ip)) return send(res, 429, { error: 'çok fazla istek' }); return send(res, ...(await S.register())); }
+      let body;
+      try { body = JSON.parse(await readBody(req, url === '/api/sync/lists' ? 2000000 : 2000)); } catch { return send(res, 400, { error: 'geçersiz istek' }); }
+      if (req.method === 'POST' && url === '/api/sync/restore') { if (limited(ip)) return send(res, 429, { error: 'çok fazla istek' }); return send(res, ...(await S.restore(body))); }
+      if (req.method === 'PUT' && url === '/api/sync/lists') return send(res, ...(await S.putLists(req, body)));
+      return send(res, 404, { error: 'bulunamadı' });
+    } catch (e) { console.error(e); return send(res, 500, { error: 'sunucu hatası' }); }
+  }
   if (req.url.startsWith('/api/merchant') || req.url.startsWith('/admin')) {
     if (!M.hasDb()) return send(res, 503, { error: 'veritabanı yok' });
     try { return await merchantRoutes(req, res, ip); } catch (e) { console.error(e); return send(res, 500, { error: 'sunucu hatası' }); }
@@ -160,4 +176,4 @@ http.createServer(async (req, res) => {
   } catch (e) { console.error('ürün araması', e); }
   send(res, 200, { hints });
 }).listen(PORT, () => console.log(`PerpAI API :${PORT}`));
-M.migrate().then(() => M.hasDb() && console.log('veritabanı hazır')).catch(e => console.error('migrate', e));
+M.migrate().then(() => S.migrate()).then(() => M.hasDb() && console.log('veritabanı hazır')).catch(e => console.error('migrate', e));

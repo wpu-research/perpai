@@ -3,7 +3,7 @@
 import crypto from 'node:crypto';
 import pg from 'pg';
 
-const db = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 }) : null;
+export const db = process.env.DATABASE_URL ? new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 5 }) : null;
 export const hasDb = () => !!db;
 
 export async function migrate() {

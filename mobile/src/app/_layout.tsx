@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 
 import { initData } from '@/perpa';
+import { startSync } from '@/sync';
 import { C } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -13,6 +14,7 @@ export default function RootLayout() {
   useEffect(() => {
     initData().then(() => { setReady(true); SplashScreen.hideAsync(); });
   }, []);
+  useEffect(() => startSync(), []);
   if (!ready) return null;
   return (
     <>

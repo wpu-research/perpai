@@ -1,12 +1,13 @@
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DB, shopByKey } from '@/perpa';
 import { listTotals, tl, useStore, type ShopList } from '@/store';
 import { C, ZONE, font } from '@/theme';
-import { Button, Card, Progress, Segmented } from '@/ui';
+import { restoreFrom } from '@/sync';
+import { Button, Card, Icon, Progress, Segmented } from '@/ui';
 
 const STATUS = {
   active: { label: 'Devam ediyor', bg: C.warnBg, fg: C.warnText, bar: C.brand },
@@ -80,8 +81,47 @@ export default function Lists() {
             <Text style={font.small}>Yeni bir liste oluştur; ne alacağını, ne aldığını ve ne kadar tuttuğunu burada takip et.</Text>
           </Card>
         )}
+
+        <Backup />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+// yedek kodu: listeler sunucuda; başka telefonda bu kodla geri gelir (sync.ts)
+function Backup() {
+  const code = useStore(s => s.syncCode);
+  const syncedAt = useStore(s => s.syncedAt);
+  const [open, setOpen] = useState(false);
+  const [input, setInput] = useState('');
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const restore = async () => {
+    setBusy(true); setMsg(null);
+    try { const n = await restoreFrom(input); setMsg(`${n} liste geri yüklendi.`); setOpen(false); setInput(''); }
+    catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
+  };
+  return (
+    <Card style={{ gap: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Icon name="cloud-check-outline" color={code ? C.okText : C.muted} />
+        <Text style={[font.h2, { flex: 1 }]}>Yedek</Text>
+        {code ? <Text selectable style={{ fontSize: 16, fontWeight: '800', letterSpacing: 1.5, color: C.ink }}>{code}</Text> : null}
+      </View>
+      <Text style={font.small}>
+        {code ? `Listelerin sunucuda yedekli${syncedAt ? ` · son ${new Date(syncedAt).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}` : ''}. Telefon değiştirirsen bu kodla geri getir.` : 'İnternete bağlanınca listelerin yedeklenecek.'}
+      </Text>
+      {open ? (
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TextInput value={input} onChangeText={setInput} placeholder="ABCD-EFGH" placeholderTextColor={C.muted} autoCapitalize="characters" autoCorrect={false}
+            style={{ flex: 1, minHeight: 46, borderRadius: 12, borderWidth: 1, borderColor: C.lineStrong, paddingHorizontal: 12, fontSize: 16, color: C.ink }} accessibilityLabel="Yedek kodu" />
+          <Button title="Getir" small onPress={restore} disabled={busy || input.replace(/[^A-Za-z0-9]/g, '').length < 8} />
+        </View>
+      ) : (
+        <Pressable accessibilityRole="button" onPress={() => setOpen(true)}><Text style={{ color: C.routeText, fontWeight: '700' }}>Başka telefondaki listelerimi getir</Text></Pressable>
+      )}
+      {msg ? <Text style={font.small}>{msg}</Text> : null}
+    </Card>
   );
 }
 

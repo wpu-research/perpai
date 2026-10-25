@@ -37,6 +37,9 @@ type State = {
   calib: number | null;                        // kamera yönü: pusula -> model açısı farkı (guide.ts)
   stride: number;                              // adım boyu (m), iki QR arasından öğrenilir
   merchantToken: string | null;                // esnaf oturumu (server/merchant.js)
+  syncToken: string | null;                    // liste yedeği (sync.ts)
+  syncCode: string | null;                     // başka telefonda geri yükleme kodu
+  syncedAt: number | null;
   createList: (text: string, title: string, pick: 'uzman' | 'yakin') => string;
   rematch: (id: string, pick: 'uzman' | 'yakin') => void;
   nextAlternative: (listId: string, itemId: string) => void;
@@ -47,6 +50,9 @@ type State = {
   setCalib: (c: number | null) => void;
   setStride: (m: number) => void;
   setMerchantToken: (t: string | null) => void;
+  setSync: (token: string, code: string) => void;
+  setSyncedAt: (t: number) => void;
+  replaceLists: (lists: ShopList[]) => void;
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -73,6 +79,9 @@ export const useStore = create<State>()(persist((set, get) => ({
   calib: null,
   stride: 0.7,
   merchantToken: null,
+  syncToken: null,
+  syncCode: null,
+  syncedAt: null,
   createList: (text, title, pick) => {
     const id = uid();
     const list: ShopList = { id, title: title.trim() || 'Alışveriş listesi', createdAt: Date.now(), status: 'planned', pick, items: match(text, pick, get().hints), here: null };
@@ -117,6 +126,9 @@ export const useStore = create<State>()(persist((set, get) => ({
   setCalib: c => set({ calib: c }),
   setStride: m => set({ stride: m }),
   setMerchantToken: t => set({ merchantToken: t }),
+  setSync: (token, code) => set({ syncToken: token, syncCode: code }),
+  setSyncedAt: t => set({ syncedAt: t }),
+  replaceLists: lists => set({ lists }),
 }), { name: 'perpai-v1', storage: createJSONStorage(() => AsyncStorage) }));
 
 export const useList = (id?: string) => useStore(s => s.lists.find(l => l.id === id));
